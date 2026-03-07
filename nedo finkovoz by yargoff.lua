@@ -24,9 +24,9 @@ if enable_autoupdate then
     if updater_loaded then
         autoupdate_loaded, Update = pcall(Updater)
         if autoupdate_loaded then
-            Update.json_url = "" .. tostring(os.clock())
+            Update.json_url = "https://raw.githubusercontent.com/yarg0/-ARZ-Helper-Mafia/main/version.json?" .. tostring(os.clock())
             Update.prefix = "[" .. string.upper(thisScript().name) .. "]: "
-            Update.url = ""
+            Update.url = "https://github.com/yarg0/-ARZ-Helper-Mafia/"
         end
     end
 end
