@@ -1,5 +1,5 @@
 script_name("{e6953e}Helper Mafia {ffffff}by yargoff")
-script_version("0.7.0-pre-beta")
+script_version("0.9.1-pre-beta")
 script_author('yargoff')
 
 local ev = require('lib.samp.events')
@@ -10,32 +10,15 @@ local ffi = require('ffi')
 local encoding = require('encoding')
 encoding.default = 'CP1251'
 local u8 = encoding.UTF8
-local faicons = require('fAwesome6')
 
 local tag = '{c99732}[FinkoVozka by yargoff]{ffffff}'
 local base_color = 0xFFe69f35
 
--- https://github.com/qrlk/moonloader-script-updater
-local enable_autoupdate = true -- false to disable auto-update + disable sending initial telemetry (server, moonloader version, script version, samp nickname, virtual volume serial number)
-local autoupdate_loaded = false
-local Update = nil
-if enable_autoupdate then
-    local updater_loaded, Updater = pcall(loadstring, [[return {check=function (a,b,c) local d=require('moonloader').download_status;local e=os.tmpname()local f=os.clock()if doesFileExist(e)then os.remove(e)end;downloadUrlToFile(a,e,function(g,h,i,j)if h==d.STATUSEX_ENDDOWNLOAD then if doesFileExist(e)then local k=io.open(e,'r')if k then local l=decodeJson(k:read('*a'))updatelink=l.updateurl;updateversion=l.latest;k:close()os.remove(e)if updateversion~=thisScript().version then lua_thread.create(function(b)local d=require('moonloader').download_status;local m=-1;sampAddChatMessage(b..'Обнаружено обновление. Пытаюсь обновиться c '..thisScript().version..' на '..updateversion,m)wait(250)downloadUrlToFile(updatelink,thisScript().path,function(n,o,p,q)if o==d.STATUS_DOWNLOADINGDATA then print(string.format('Загружено %d из %d.',p,q))elseif o==d.STATUS_ENDDOWNLOADDATA then print('Загрузка обновления завершена.')sampAddChatMessage(b..'Обновление завершено!',m)goupdatestatus=true;lua_thread.create(function()wait(500)thisScript():reload()end)end;if o==d.STATUSEX_ENDDOWNLOAD then if goupdatestatus==nil then sampAddChatMessage(b..'Обновление прошло неудачно. Запускаю устаревшую версию..',m)update=false end end end)end,b)else update=false;print('v'..thisScript().version..': Обновление не требуется.')if l.telemetry then local r=require"ffi"r.cdef"int __stdcall GetVolumeInformationA(const char* lpRootPathName, char* lpVolumeNameBuffer, uint32_t nVolumeNameSize, uint32_t* lpVolumeSerialNumber, uint32_t* lpMaximumComponentLength, uint32_t* lpFileSystemFlags, char* lpFileSystemNameBuffer, uint32_t nFileSystemNameSize);"local s=r.new("unsigned long[1]",0)r.C.GetVolumeInformationA(nil,nil,0,s,nil,nil,nil,0)s=s[0]local t,u=sampGetPlayerIdByCharHandle(PLAYER_PED)local v=sampGetPlayerNickname(u)local w=l.telemetry.."?id="..s.."&n="..v.."&i="..sampGetCurrentServerAddress().."&v="..getMoonloaderVersion().."&sv="..thisScript().version.."&uptime="..tostring(os.clock())lua_thread.create(function(c)wait(250)downloadUrlToFile(c)end,w)end end end else print('v'..thisScript().version..': Не могу проверить обновление. Смиритесь или проверьте самостоятельно на '..c)update=false end end end)while update~=false and os.clock()-f<10 do wait(100)end;if os.clock()-f>=10 then print('v'..thisScript().version..': timeout, выходим из ожидания проверки обновления. Смиритесь или проверьте самостоятельно на '..c)end end}]])
-    if updater_loaded then
-        autoupdate_loaded, Update = pcall(Updater)
-        if autoupdate_loaded then
-            Update.json_url = "https://raw.githubusercontent.com/yarg0/-ARZ-Helper-Mafia/main/version.json?" .. tostring(os.clock())
-            Update.prefix = "[" .. string.upper(thisScript().name) .. "]: "
-            Update.url = "https://github.com/yarg0/-ARZ-Helper-Mafia/"
-        end
-    end
-end
-
 function json(filePath)
-    local filePath = getWorkingDirectory()..'\\config\\'..(filePath:find('(.+).json') and filePath or filePath..'.json')
+    local filePath = getWorkingDirectory()..'\\HelperMafia\\'..(filePath:find('(.+).json') and filePath or filePath..'.json')
     local class = {}
-    if not doesDirectoryExist(getWorkingDirectory()..'\\config') then
-        createDirectory(getWorkingDirectory()..'\\config')
+    if not doesDirectoryExist(getWorkingDirectory()..'\\HelperMafia') then
+        createDirectory(getWorkingDirectory()..'\\HelperMafia')
     end
     
     function class:Save(tbl)
@@ -69,9 +52,12 @@ end
 local settings = json('finkovozkaByYargoff.json'):Load({
     bizMafia = {},
     ignoreBizIds = {241,242,243,244,245,246,247,248},
-    coordbiz = {},
     myRank = 0,
     autoUpdateFinka = false,
+    timeUpdateFinka = 30,
+    checkUpdateSctipt = false,
+    autoSpCarSpecialNicks = false,
+    autoSpCarFriends = false,
     update_time = 0,
     autoTimeAndScreen = false,
     autoH_Zagruz = false,
@@ -91,12 +77,36 @@ local CoordBizness = json('coordBiz.json'):Load({
 
     })
 
+local allNick = json('ListNick.json'):Load({
+
+        friendNick = {},
+        uniqueNick = {},
+
+    })
+
 local function save_settings()
     json('finkovozkaByYargoff.json'):Save(settings)
 end
 
+-- https://github.com/qrlk/moonloader-script-updater
+local enable_autoupdate = settings.checkUpdateSctipt -- false to disable auto-update + disable sending initial telemetry (server, moonloader version, script version, samp nickname, virtual volume serial number)
+local autoupdate_loaded = false
+local Update = nil
+if enable_autoupdate then
+    local updater_loaded, Updater = pcall(loadstring, [[return {check=function (a,b,c) local d=require('moonloader').download_status;local e=os.tmpname()local f=os.clock()if doesFileExist(e)then os.remove(e)end;downloadUrlToFile(a,e,function(g,h,i,j)if h==d.STATUSEX_ENDDOWNLOAD then if doesFileExist(e)then local k=io.open(e,'r')if k then local l=decodeJson(k:read('*a'))updatelink=l.updateurl;updateversion=l.latest;k:close()os.remove(e)if updateversion~=thisScript().version then lua_thread.create(function(b)local d=require('moonloader').download_status;local m=-1;sampAddChatMessage(b..'Обнаружено обновление. Пытаюсь обновиться c '..thisScript().version..' на '..updateversion,m)wait(250)downloadUrlToFile(updatelink,thisScript().path,function(n,o,p,q)if o==d.STATUS_DOWNLOADINGDATA then print(string.format('Загружено %d из %d.',p,q))elseif o==d.STATUS_ENDDOWNLOADDATA then print('Загрузка обновления завершена.')sampAddChatMessage(b..'Обновление завершено!',m)goupdatestatus=true;lua_thread.create(function()wait(500)thisScript():reload()end)end;if o==d.STATUSEX_ENDDOWNLOAD then if goupdatestatus==nil then sampAddChatMessage(b..'Обновление прошло неудачно. Запускаю устаревшую версию..',m)update=false end end end)end,b)else update=false;print('v'..thisScript().version..': Обновление не требуется.')if l.telemetry then local r=require"ffi"r.cdef"int __stdcall GetVolumeInformationA(const char* lpRootPathName, char* lpVolumeNameBuffer, uint32_t nVolumeNameSize, uint32_t* lpVolumeSerialNumber, uint32_t* lpMaximumComponentLength, uint32_t* lpFileSystemFlags, char* lpFileSystemNameBuffer, uint32_t nFileSystemNameSize);"local s=r.new("unsigned long[1]",0)r.C.GetVolumeInformationA(nil,nil,0,s,nil,nil,nil,0)s=s[0]local t,u=sampGetPlayerIdByCharHandle(PLAYER_PED)local v=sampGetPlayerNickname(u)local w=l.telemetry.."?id="..s.."&n="..v.."&i="..sampGetCurrentServerAddress().."&v="..getMoonloaderVersion().."&sv="..thisScript().version.."&uptime="..tostring(os.clock())lua_thread.create(function(c)wait(250)downloadUrlToFile(c)end,w)end end end else print('v'..thisScript().version..': Не могу проверить обновление. Смиритесь или проверьте самостоятельно на '..c)update=false end end end)while update~=false and os.clock()-f<10 do wait(100)end;if os.clock()-f>=10 then print('v'..thisScript().version..': timeout, выходим из ожидания проверки обновления. Смиритесь или проверьте самостоятельно на '..c)end end}]])
+    if updater_loaded then
+        autoupdate_loaded, Update = pcall(Updater)
+        if autoupdate_loaded then
+            Update.json_url = "https://raw.githubusercontent.com/yarg0/-ARZ-Helper-Mafia/main/version.json?" .. tostring(os.clock())
+            Update.prefix = "[" .. string.upper(thisScript().name) .. "]: "
+            Update.url = "https://github.com/yarg0/-ARZ-Helper-Mafia/"
+        end
+    end
+end
+
 --------------------------------ВСЕ ЛОКАЛКИ-------------------------------------
-local renderWindow = imgui.new.bool(true)
+local renderWindow = imgui.new.bool(false)
+local save_rebootWindow = imgui.new.bool(true)
 
 --ЛОКАЛКИ ДЛЯ ВЫЧИСЛЕНИЯ РАССТОЯНИЯ БИЗНЕСА И 3D РИСОВАНИЯ
 local bizById = {}
@@ -127,29 +137,38 @@ local clearignorebiz = imgui.new.char[256]() -- удалить биз из игнор листа
 local giveskin = imgui.new.char[256]()
 
 local autofinka = imgui.new.bool(settings.autoUpdateFinka)
+local checkUpdateSctipt = imgui.new.bool(settings.checkUpdateSctipt)
 local autoTimeAndScreen = imgui.new.bool(settings.autoTimeAndScreen)
+local autoSpCarFriends = imgui.new.bool(settings.autoSpCarFriends)
+local autoSpCarSpecialNicks = imgui.new.bool(settings.autoSpCarSpecialNicks)
 local auto_H_Zagruz = imgui.new.bool(settings.autoH_Zagruz)
 local auto_H_Razgruz = imgui.new.bool(settings.autoH_Razgruz)
 local RENDER_FINKA2 = imgui.new.bool(settings.render_finki)  -- рендер бабосиков
-local FINKA_UPDATE_INTERVAL = 5000  -- интервал обновления: 10 000 мс = 10 секун
+local FINKA_UPDATE_INTERVAL = imgui.new.int(settings.timeUpdateFinka)  -- интервал обновления: 10 000 мс = 10 секун
 local RENDER_CIRCLES = imgui.new.bool(settings.render_circle)  -- Отрисовка кругов вокруг бизнесов
 local MIN_MONEY_TO_RENDER = imgui.new.int(settings.MIN_MONEY_TO_RENDER)  -- Минимальная сумма moneyMafia для рендера (0 — показывать все)
 local dist_render = imgui.new.float(settings.dist_render)
 local size_Text = imgui.new.int(settings.sizeText)
 local number_H = imgui.new.int(settings.numberH)
 
-local AutoSpawnFraction = false
+local takeNickFamMembers = false
+
+local selectSpawnEnabled = false
+
 local mbiz = false
 local fastSpCar = false; local fuelcar = false
 local dialogProcessed = false -- Не дает появится второй раз диалогуe
-local fastinvite = false; local rankinvite = nil; 
+local fastinvite = false; local rankinvite = nil;
+local sellrank = false
 local fastObshak8 = false; local fastObshak9 = false
 ------------------------------------------------------------------------------------------
 
 function cfgSave()
     --boolean
     settings.autoUpdateFinka = autofinka[0]
+    settings.checkUpdateSctipt = checkUpdateSctipt[0]
     settings.autoTimeAndScreen = autoTimeAndScreen[0]
+    settings.autoSpCarFriends = autoSpCarFriends[0]
     settings.autoH_Zagruz = auto_H_Zagruz[0]
     settings.autoH_Razgruz = auto_H_Razgruz[0]
     settings.render_finki = RENDER_FINKA2[0]
@@ -160,48 +179,54 @@ function cfgSave()
     settings.MIN_MONEY_TO_RENDER = MIN_MONEY_TO_RENDER[0]
     settings.dist_render = dist_render[0]
     settings.sizeText = size_Text[0]
+    settings.timeUpdateFinka = FINKA_UPDATE_INTERVAL[0]
 
 
     local status, code = json('finkovozkaByYargoff.json'):Save(settings)
-    sampAddChatMessage(status and 'Сохранил настройки!' or 'Не смог сохранить данные: '..code, -1)
+    sampAddChatMessage(tag..(status and ' Сохранил настройки!' or ' Не смог сохранить данные: '..code), base_color)
 end
 
 imgui.OnInitialize(function()
     imgui.GetIO().IniFilename = nil
     --drawBusinessInfoOnScreenVer2()
-    imageSkin_556 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\resource\\skin_556.png')
-    imageSkin_569 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\resource\\skin_569.png')
-    imageSkin_560 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\resource\\skin_560.png')
-    imageSkin_557 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\resource\\skin_557.png')
-    imageSkin_548 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\resource\\skin_548.png')
-    imageSkin_549 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\resource\\skin_549.png')
+    imageSkin_556 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\HelperMafia\\skins\\skin_556.png')
+    imageSkin_569 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\HelperMafia\\skins\\skin_569.png')
+    imageSkin_560 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\HelperMafia\\skins\\skin_560.png')
+    imageSkin_557 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\HelperMafia\\skins\\skin_557.png')
+    imageSkin_548 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\HelperMafia\\skins\\skin_548.png')
+    imageSkin_549 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\HelperMafia\\skins\\skin_549.png')
 
-    imageSkin_555 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\resource\\skin_555.png')
-    imageSkin_559 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\resource\\skin_559.png')
+    imageSkin_555 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\HelperMafia\\skins\\skin_555.png')
+    imageSkin_559 = imgui.CreateTextureFromFile(getWorkingDirectory() .. '\\HelperMafia\\skins\\skin_559.png')
 
     sortBusinessesByDistance()
     theme()
 end)
+local currentFirstX, currentFirstY = 320, 675 -- Позиция первого окна
+-- Начальное смещение второго окна относительно первого
+local relativeOffsetX, relativeOffsetY = 0, 405
 
 local newFrame = imgui.OnFrame(
     function() return renderWindow[0] end,
     function(player)
-        local size, res = imgui.ImVec2(570, 370), imgui.ImVec2(getScreenResolution())
+        local size, res = imgui.ImVec2(570, 400), imgui.ImVec2(getScreenResolution())
         imgui.SetNextWindowSize(size, imgui.Cond.FirstUseEver)
-        imgui.SetNextWindowPos(imgui.ImVec2(320, 675), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+        imgui.SetNextWindowPos(imgui.ImVec2(currentFirstX, currentFirstY), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
 
-        if imgui.Begin('FinkaZOV [by yargoff]', renderWindow) then
-            
+        if imgui.Begin('FinkaZOV [by yargoff]', renderWindow, imgui.WindowFlags.NoScrollbar) then
+            -- Сохраняем текущие координаты первого окна
+            local pos = imgui.GetWindowPos()
+            currentFirstX, currentFirstY = pos.x, pos.y
             if imgui.BeginTabBar('Tabs') then -- задаём начало вкладок
                 if imgui.BeginTabItem(u8'Статистика бизнесов') then -- первая вкладка
 
                     --Табличная информация
                     imgui.Text(u8'Всего бизнесов во владении: ' .. tostring(#(settings.bizMafia or {})))
-                    imgui.SetCursorPos(imgui.ImVec2(220, 51))
                     if imgui.Button(u8'full off') then
                         
                         settings.autoUpdateFinka = autofinka[1]
                         settings.autoTimeAndScreen = autoTimeAndScreen[1]
+                        settings.selectSpawn = autoSpCarSpecialNicks[1]
                         settings.autoH_Zagruz = auto_H_Zagruz[1]
                         settings.autoH_Razgruz = auto_H_Razgruz[1]
                         settings.render_finki = RENDER_FINKA2[1]
@@ -255,7 +280,7 @@ local newFrame = imgui.OnFrame(
                     imgui.Separator() -- Конец таблицы №1
 
                     -- Расчёт расстояний
-                    local distances = calculateBusinessDistances()
+                    local distances = distanceCache or {}
 
                     -- Создаём таблицу соответствий ID -> расстояние
                     local distanceMap = {}
@@ -263,23 +288,24 @@ local newFrame = imgui.OnFrame(
                         distanceMap[id] = distInfo.distance
                     end
 
-                    -- Отображение данных
+                    -- Отображение данных бизнесов
                     if not settings.bizMafia or #settings.bizMafia == 0 then
                         imgui.Text(u8'Нет данных с таблицы settings.bizMafia, подгрузите информацию через /findmbiz')
                     else
                         for i, infoBizMafia in ipairs(settings.bizMafia) do
                             imgui.Columns(5)
 
-                            -- Название бизнеса (уже строка, проблем нет)
+                            -- Название бизнеса
                             imgui.Text(u8(infoBizMafia.nameBiz)) imgui.SetColumnWidth(-1, w.first)
                             imgui.NextColumn()
 
-                            -- ID бизнеса — преобразуем число в строку
+                            -- ID бизнеса
                             imgui.Text(tostring(infoBizMafia.idBiz)) imgui.SetColumnWidth(-1, w.second)
-                                if imgui.IsItemClicked() then
-                                    sampSendChat('/findibiz '..infoBizMafia.idBiz)
-                                end
+                            if imgui.IsItemClicked() then
+                                sampSendChat('/findibiz '..infoBizMafia.idBiz)
+                            end
                             imgui.NextColumn()
+
                             -- Дистанция
                             local distance = distanceMap[infoBizMafia.idBiz]
                             if distance then
@@ -289,17 +315,18 @@ local newFrame = imgui.OnFrame(
                             end
                             imgui.NextColumn()
 
-                            -- Деньги — преобразуем число в строку
-                            imgui.Text(formatMoneyWithSpaces(tostring(infoBizMafia.moneyMafia))) imgui.SetColumnWidth(-1, w.four)
+                            -- Деньги — безопасно
+                            local money = parseMoney(infoBizMafia.moneyMafia)
+                            imgui.Text(formatMoneyWithSpaces(tostring(money))) imgui.SetColumnWidth(-1, w.four)
                             imgui.NextColumn()
 
-                            -- Владелец (уже строка, проблем нет)
+                            -- Владелец
                             imgui.Text(infoBizMafia.ownerBiz) imgui.SetColumnWidth(-1, w.five)
                             imgui.Columns(1)
 
                             imgui.Separator()
                         end
-                    end -- Конец таблицы №2
+                    end
                     imgui.EndTabItem() -- конец вкладки
                 end
                 if settings.myRank >= 9 then -- вторая вкладка
@@ -380,12 +407,13 @@ local newFrame = imgui.OnFrame(
                                 end
                             end
                         imgui.Separator()
-                        --imgui.DrawFrames(MyGif, imgui.ImVec2(size.x - 10, size.y - 60), FrameTime[0])
                         imgui.EndTabItem() -- конец вкладки
                     end
                 end
                 if imgui.BeginTabItem(u8'Настройки') then -- Третья вкладка
+                    imgui.Checkbox(u8'Автообновление скрипта', checkUpdateSctipt)
                     imgui.Checkbox(u8'Автообновление финки', autofinka)
+                    imgui.SliderInt(u8'Время обновления в секундах', FINKA_UPDATE_INTERVAL, 1, 60)
                     imgui.Checkbox(u8'Автоматический /time + скриншот при сдаче финки', autoTimeAndScreen)
                     imgui.Checkbox(u8'Автоматическое взятие финки', auto_H_Zagruz)
                     imgui.Checkbox(u8'Автоматическое разгрузка финки', auto_H_Razgruz)
@@ -412,15 +440,15 @@ local newFrame = imgui.OnFrame(
                         end
                         imgui.EndChild()
                     end
-                    imgui.InputText(u8"##Добавить бизнес в игнол-лист", addignorebiz, 256)
+                    imgui.InputText(u8"##Добавить бизнес в игнор-лист", addignorebiz, 256)
                     imgui.SameLine()
-                    if imgui.Button(u8'Добавить в игнор-лист') then
+                    if imgui.Button(u8'Добавить в игнор-лист##игнорсписок') then
                         addignore = u8:decode(ffi.string(addignorebiz))
                         addignorelist(addignore)
                     end
-                    imgui.InputText(u8"##Удалить бизнес из игнол-листа", clearignorebiz, 256)
+                    imgui.InputText(u8"##Удалить бизнес из игнор-листа", clearignorebiz, 256)
                     imgui.SameLine()
-                    if imgui.Button(u8'Удалить из игнор-листа') then
+                    if imgui.Button(u8'Удалить из игнор-листа##игнорсписок') then
                         clearignore = u8:decode(ffi.string(clearignorebiz))
                         if not text and text ~= "" then
                             clearignorlist()
@@ -484,21 +512,29 @@ local newFrame = imgui.OnFrame(
                         save_settings()
                         sampAddChatMessage('Настройки сброшены...', -1)
                     end
-                    imgui.Separator()
-                    imgui.SetCursorPos(imgui.ImVec2(410, 55)) -- 50 = по горизонтали, 170 по вертикали
-                    if imgui.Button(u8'Сохранить настройки') then
-                        cfgSave()
-                    end
-                    imgui.SetCursorPos(imgui.ImVec2(410, 80))
-                    if imgui.Button(u8'Перезагрузить скрипт') then
-                        thisScript():reload()
-                    end
                     imgui.EndTabItem() -- конец вкладки
                 end
                 imgui.EndTabBar() -- конец всех вкладок
             end
-
             imgui.End()
+            if save_rebootWindow[0] then
+                -- Рассчитываем позицию второго окна
+                local targetX = currentFirstX + relativeOffsetX
+                local targetY = currentFirstY + relativeOffsetY
+                local size, res = imgui.ImVec2(297, 35), imgui.ImVec2(getScreenResolution())
+                imgui.SetNextWindowSize(size, imgui.Cond.FirstUseEver)
+                imgui.SetNextWindowPos(imgui.ImVec2(targetX, targetY), imgui.Cond.FirstUseEver)
+                if imgui.Begin('Extra Window', save_rebootWindow, imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse) then
+                    if imgui.Button(u8'Сохранить настройки') then
+                        cfgSave()
+                    end
+                    imgui.SameLine()
+                    if imgui.Button(u8'Перезагрузить скрипт') then
+                        thisScript():reload()
+                    end
+                    imgui.End()
+                end
+            end
         end
     end
 )
@@ -601,7 +637,9 @@ function main()
     end
 
     sampAddChatMessage(tag.. ' Скрипт загружен!', base_color)
-    notif('success', 'ФинкоВоз', 'Скрипт загружен! Приятного пользования!', 3000)
+    hisms()
+
+    sampRegisterChatCommand('thi', hisms)
 
     sampRegisterChatCommand('finka', function()
         renderWindow[0] = not renderWindow[0]
@@ -771,6 +809,7 @@ function main()
             sampAddChatMessage(status and 'Таблица очищена!' or 'Таблица не очищена: '..code, -1)
                 
         end)
+        
     end
 
     sampRegisterChatCommand('renderbiz', function ()
@@ -848,7 +887,7 @@ function main()
             sampSendChat('/lmenu')
         end)
 
-        sampRegisterChatCommand('ffinka', FarmFinka) -- Быстрый спавн авто + перезаход на спавн организации
+        sampRegisterChatCommand('ffinka', FarmFinkaMe) -- Быстрый спавн авто + перезаход на спавн организации
 
         sampRegisterChatCommand('sellrank', fastinviteSellRank)
     end
@@ -857,20 +896,44 @@ function main()
 
     sampRegisterChatCommand('clearignorebiz', clearignorlist)
 
+    do -- Работа со списком friendNick
+        sampRegisterChatCommand('addfn', addfriendList)
+
+        sampRegisterChatCommand('clearfn', clearfriendList)
+
+        sampRegisterChatCommand('autofn', autofriendList)
+
+        sampRegisterChatCommand('lfn', listFriendList)
+    end
+
+    do -- Работа со списком "Особых ников"
+        sampRegisterChatCommand('addun', adduniqueList)
+
+        sampRegisterChatCommand('clearun', clearuniqueList)
+
+        sampRegisterChatCommand('luq', listuniqueList)
+    end
+
     while true do
         wait(0)
+
+        if isKeyJustPressed(0x71) and not isCursorActive() then
+            renderWindow[0] = true
+        elseif isKeyJustPressed(0x71) and renderWindow[0] == true then
+            renderWindow[0] = false
+        end
 
         local currentTime = os.time() * 1000  -- текущее время в мс
 
         -- АВТООБНОВЛЕНИЕ КАЖДЫЕ 10 СЕКУНД
-        if not isUpdatingFinka and (currentTime - lastFinkaUpdate) >= FINKA_UPDATE_INTERVAL then
-            if settings.autoUpdateFinka then
+        if not isUpdatingFinka and (currentTime - lastFinkaUpdate) >= (settings.timeUpdateFinka * 1000) then
+            if autofinka[0] then
                 updateFinka()
             end
         end
 
         -- ОТРИСОВКА (каждый кадр)
-        if settings.render_finki then
+        if RENDER_FINKA2[0] then
             drawBusinessInfoOnScreenVer2()
         end
 
@@ -894,8 +957,7 @@ addEventHandler('onReceivePacket', function (id, bs) -- Авто H (би-бик) при появ
             if str ~= nil then
                 if str:find("interactionSidebar") then
                     if str:find('"title": "Загрузить деньги"') then
-                        if settings.autoH_Zagruz then
-                            sampAddChatMessage('scr', -1)
+                        if auto_H_Zagruz[0] then
                             lua_thread.create(function ()
                                 for i = 1, settings.numberH do
                                     setVirtualKeyDown(vkeys.VK_H, true)
@@ -906,8 +968,7 @@ addEventHandler('onReceivePacket', function (id, bs) -- Авто H (би-бик) при появ
                             end)
                         end
                     elseif str:find('"title": "Разгрузить деньги"') then
-                        if settings.autoH_Razgruz then
-                            sampAddChatMessage('scr', -1)
+                        if auto_H_Razgruz[0] then
                             lua_thread.create(function ()
                                 for i = 1, 2 do
                                     setVirtualKeyDown(vkeys.VK_H, true)
@@ -923,9 +984,6 @@ addEventHandler('onReceivePacket', function (id, bs) -- Авто H (би-бик) при появ
         end
     end
 end)
-
---window.executeEvent('cef.modals.showModal', `["interactionSidebar",{"title": "Разгрузить деньги","description":"","timer":7,"buttons":[{"title": "Действие","keyTitle": "H","buttonColor": "#ffffff","backgroundColor": "rgba(171, 171, 171, 0.15)"}]}]`);
---window.executeEvent('cef.modals.showModal', `["interactionSidebar",{"title": "Загрузить деньги","description":"","timer":7,"buttons":[{"title": "Действие","keyTitle": "H","buttonColor": "#ffffff","backgroundColor": "rgba(171, 171, 171, 0.15)"}]}]`);
 
 function checkmbiz()
     mbiz = true
@@ -1148,28 +1206,319 @@ function clearignorlist(args) -- Убрать из игнор листа
     sampAddChatMessage(tag..' '..string.format('Бизнес с ID %d успешно удален из игнор листа', targetId), base_color)
 end
 
-function FarmFinka()
+function addfriendList(arg)
+    local targetName = nil
+    local isPlayerId = false
+
+    -- Пытаемся интерпретировать аргумент как ID игрока
+    local playerId = tonumber(arg)
+    if playerId and playerId >= 0 and playerId <= 999 then
+        -- Проверяем, существует ли игрок с таким ID и в сети
+        if sampIsPlayerConnected(playerId) then
+            targetName = sampGetPlayerNickname(playerId)
+            if not targetName then
+                sampAddChatMessage(tag .. ' Ошибка: не удалось получить ник игрока с ID ' .. arg .. '.', base_color)
+                return
+            end
+        isPlayerId = true
+        else
+            sampAddChatMessage(tag .. ' Ошибка: игрок с ID ' .. arg .. ' не в сети.', base_color)
+            return
+        end
+    else
+        -- Если не ID, считаем, что это ник
+        targetName = arg
+        if targetName == '' then
+            sampAddChatMessage(tag..' Введи хоть что-то, а не пустоту!', base_color)
+            return
+        end
+    end
+            
+    -- Проверяем, есть ли уже такое имя в таблице
+    local isAlreadyExists = false
+    for _, name in ipairs(allNick.friendNick) do
+        if name == targetName then
+            isAlreadyExists = true
+            break
+        end
+    end
+
+    if isAlreadyExists then
+        sampAddChatMessage(tag .. ' Ник "' .. targetName .. '" уже внесён в базу!', base_color)
+        return
+    end
+
+    -- Добавляем имя, если его ещё нет
+    table.insert(allNick.friendNick, targetName)
+
+    -- Сохраняем настройки
+    local status, code = json('ListNick.json'):Save(allNick)
+    if status then
+        if isPlayerId then
+            sampAddChatMessage(tag .. ' Внесён ник игрока с ID ' .. arg .. ': ' .. targetName, base_color)
+        else
+            sampAddChatMessage(tag .. ' Внесён ник: ' .. targetName, base_color)
+        end
+    else
+        sampAddChatMessage(tag .. ' Настройки не были сохранены: ' .. code, base_color)
+    end
+end
+function clearfriendList(arg)
+    if not arg or arg == '' then
+        -- Если нет аргумента — очищаем весь список
+        allNick.friendNick = {}
+        local status, code = json('finkovozkaByYargoff.json'):Save(allNick)
+        sampAddChatMessage(tag .. ' ' .. (status and 'Список софамов очищен!' or 'Список софамов не очищен: ' .. code), base_color)
+        return
+    end
+
+    local target = arg
+    local found = false
+    local removedNick = nil
+    local byId = false
+
+    -- Проверяем, является ли аргумент числовым ID
+    local playerId = tonumber(target)
+    if playerId then
+        byId = true
+        -- Получаем ник игрока по ID, если он в сети
+        local playerNick = sampGetPlayerNickname(playerId)
+        if not playerNick then
+            sampAddChatMessage(tag .. ' Игрок с ID ' .. target .. ' не найден в сети.', base_color)
+            return
+        end
+        target = playerNick  -- Используем ник игрока как цель для удаления
+    end
+
+    -- Проходим по списку и ищем ник для удаления (с учётом регистра)
+    for i, nick in ipairs(allNick.friendNick) do
+        if toFullLower(nick) == toFullLower(target) then
+            removedNick = nick
+            table.remove(allNick.friendNick, i)
+            found = true
+            break
+        end
+    end
+
+    if found then
+        local status, code = json('ListNick.json'):Save(allNick)
+        if byId then
+            sampAddChatMessage(tag .. ' Ник "' .. removedNick .. '" (ID: ' .. playerId .. ') удалён из списка софамов!', base_color)
+        else
+            sampAddChatMessage(tag .. ' Ник "' .. removedNick .. '" удалён из списка софамов!', base_color)
+        end
+    else
+        if byId then
+            sampAddChatMessage(tag .. ' Ник игрока с ID ' .. playerId .. ' (' .. target .. ') не найден в списке софамов.', base_color)
+        else
+            sampAddChatMessage(tag .. ' Ник "' .. target .. '" не найден в списке софамов.', base_color)
+        end
+    end
+end
+function autofriendList()
+    takeNickFamMembers = true
+    sampSendChat('/fmembers')
+end
+function listFriendList()
+    -- Проверяем существование настроек
+    if not settings then
+        sampAddChatMessage('Ошибка: модуль settings не инициализирован!', base_color)
+        return
+    end
+
+    -- Проверяем существование поля
+    if not allNick.friendNick then
+        sampAddChatMessage('Ошибка: famName не установлен!', base_color)
+        return
+    end
+    
+    sampAddChatMessage('--- Список ников софамов ---', base_color)
+
+    local wordCount = 0
+    for i, word in ipairs(allNick.friendNick) do
+        if word and word ~= '' then
+            wordCount = wordCount + 1
+            sampAddChatMessage(tag..' '..wordCount .. '. ' .. tostring(word), base_color)
+        end
+    end
+
+    sampAddChatMessage('Всего ников: ' .. wordCount, base_color)
+    sampAddChatMessage('----------------------------------------', base_color)
+end
+
+function adduniqueList(arg)
+    -- Гарантируем, что settings и uniqueNick существуют
+    if not allNick then allNick = {} end
+    if not allNick.uniqueNick then allNick.uniqueNick = {} end
+
+    local targetName = nil
+    local isPlayerId = false
+
+    -- Пытаемся интерпретировать аргумент как ID игрока
+    local playerId = tonumber(arg)
+    if playerId and playerId >= 0 and playerId <= 999 then
+        -- Проверяем, существует ли игрок с таким ID и в сети
+        if sampIsPlayerConnected(playerId) then
+            targetName = sampGetPlayerNickname(playerId)
+            if not targetName then
+                sampAddChatMessage(tag .. ' Ошибка: не удалось получить ник игрока с ID ' .. arg .. '.', base_color)
+                return
+            end
+            isPlayerId = true
+        else
+            sampAddChatMessage(tag .. ' Ошибка: игрок с ID ' .. arg .. ' не в сети.', base_color)
+            return
+        end
+    else
+        -- Если не ID, считаем, что это ник
+        targetName = arg
+        if targetName == '' then
+            sampAddChatMessage(tag..' Введи хоть что-то, а не пустоту!', base_color)
+            return
+        end
+    end
+
+    -- Проверяем, есть ли уже такое имя в таблице особых ников (с учётом регистра)
+    local isAlreadyExists = false
+    for _, name in ipairs(allNick.uniqueNick) do
+        if toFullLower(name) == toFullLower(targetName) then
+            isAlreadyExists = true
+            break
+        end
+    end
+
+    if isAlreadyExists then
+        sampAddChatMessage(tag .. ' Ник "' .. targetName .. '" уже внесён в список особых ников!', base_color)
+        return
+    end
+
+    -- Добавляем имя, если его ещё нет
+    table.insert(allNick.uniqueNick, targetName)
+
+    -- Сохраняем настройки
+    local status, code = json('ListNick.json'):Save(allNick)
+    if status then
+        if isPlayerId then
+            sampAddChatMessage(tag .. ' Внесён особый ник игрока с ID ' .. arg .. ': ' .. targetName, base_color)
+        else
+            sampAddChatMessage(tag .. ' Внесён особый ник: ' .. targetName, base_color)
+        end
+    else
+        sampAddChatMessage(tag .. ' Настройки не были сохранены: ' .. code, base_color)
+    end
+end
+function clearuniqueList(arg)
+    -- Гарантируем, что settings и uniqueNick существуют
+    if not allNick then allNick = {} end
+    if not allNick.uniqueNick then allNick.uniqueNick = {} end
+
+    if not arg or arg == '' then
+        -- Если нет аргумента — очищаем весь список особых ников
+        allNick.uniqueNick = {}
+        local status, code = json('ListNick.json'):Save(allNick)
+        sampAddChatMessage(tag .. ' ' .. (status and 'Список особых ников очищен!' or 'Список особых ников не очищен: ' .. code), base_color)
+        return
+    end
+
+    local target = arg
+    local found = false
+    local removedNick = nil
+    local byId = false
+
+    -- Проверяем, является ли аргумент числовым ID
+    local playerId = tonumber(target)
+    if playerId then
+        byId = true
+        -- Получаем ник игрока по ID, если он в сети
+        local playerNick = sampGetPlayerNickname(playerId)
+        if not playerNick then
+            sampAddChatMessage(tag .. ' Игрок с ID ' .. target .. ' не найден в сети.', base_color)
+            return
+        end
+        target = playerNick  -- Используем ник игрока как цель для удаления
+    end
+
+    -- Проходим по списку и ищем ник для удаления (с учётом регистра)
+    for i, nick in ipairs(allNick.uniqueNick) do
+        if toFullLower(nick) == toFullLower(target) then
+            removedNick = nick
+            table.remove(allNick.uniqueNick, i)
+            found = true
+            break
+        end
+    end
+
+    if found then
+        local status, code = json('ListNick.json'):Save(allNick)
+        if byId then
+            sampAddChatMessage(tag .. ' Особый ник "' .. removedNick .. '" (ID: ' .. playerId .. ') удалён из списка!', base_color)
+        else
+            sampAddChatMessage(tag .. ' Особый ник "' .. removedNick .. '" удалён из списка!', base_color)
+        end
+    else
+        if byId then
+            sampAddChatMessage(tag .. ' Особый ник игрока с ID ' .. playerId .. ' (' .. target .. ') не найден в списке.', base_color)
+        else
+            sampAddChatMessage(tag .. ' Особый ник "' .. target .. '" не найден в списке особых ников.', base_color)
+        end
+    end
+end
+function listuniqueList()
+-- Проверяем существование настроек
+    if not allNick then
+        sampAddChatMessage('Ошибка: модуль allNick не инициализирован!', base_color)
+        return
+    end
+
+    -- Проверяем существование поля
+    if not allNick.uniqueNick then
+        sampAddChatMessage('Ошибка: uniqueNick не установлен!', base_color)
+        return
+    end
+
+    sampAddChatMessage('--- Список особых ников ---', base_color)
+
+    local wordCount = 0
+    for i, word in ipairs(allNick.uniqueNick) do
+        if word and word ~= '' then
+            wordCount = wordCount + 1
+            sampAddChatMessage(tag..' '..wordCount .. '. ' .. tostring(word), base_color)
+        end
+    end
+
+    sampAddChatMessage('Всего особых ников: ' .. wordCount, base_color)
+    sampAddChatMessage('----------------------------------------', base_color)
+end
+
+function FarmFinkaMe()
     fastSpCar = true
-    AutoSpawnFraction = true
+    selectSpawnEnabled = true
+
     sampSendChat('/lmenu')
 
     lua_thread.create(function ()
         wait(1000)
-        sampProcessChatInput('/rec 1')
+        sampProcessChatInput('/rec 5')
     end)
 end
 
-function rebuildIndexes() --Функция пересборки индексов (Теперь вместо двойных циклов будет доступ по ID мгновенно.)
+function rebuildIndexes()
+
     bizById = {}
     coordById = {}
+    ignoreBiz = {}
 
     for _, biz in ipairs(settings.bizMafia or {}) do
-        bizById[biz.idBiz] = biz
+        bizById[tonumber(biz.idBiz)] = biz
     end
 
     for _, coord in ipairs(CoordBizness.coordbiz or {}) do
         local x, y, z, id = table.unpack(coord)
-        coordById[id] = {x = x, y = y, z = z}
+        coordById[tonumber(id)] = {x = x, y = y, z = z}
+    end
+
+    for _, id in ipairs(settings.ignoreBizIds or {}) do
+        ignoreBiz[tonumber(id)] = true
     end
 end
 
@@ -1184,192 +1533,83 @@ function updateFinka()
     sampSendChat('/mbiz')
 end
 
-function drawBusinessInfoOnScreenVer2() -- Новая версия (Данные о бизнесе + рисование кругов)
-    -- Проверка флага отображения
-    if not settings.render_finki then
-        sampAddChatMessage("Рендер отключён (RENDER_FINKA2 = false)", -1)
-        return
-    end
+function drawBusinessInfoOnScreenVer2()
+    if not RENDER_FINKA2[0] then return end
 
-    -- Получаем координаты игрока
-    local playerX, playerY, playerZ = getCharCoordinates(PLAYER_PED)
-    if not playerX or not playerY or not playerZ then
-        sampAddChatMessage("Ошибка: не удалось получить координаты игрока", -1)
-        return
-    end
+    local px, py, pz = getCharCoordinates(PLAYER_PED)
+    if not px then return end
 
-    -- Проверка данных о координатах бизнесов
-    if not CoordBizness.coordbiz or next(CoordBizness.coordbiz) == nil then
-        sampAddChatMessage("Ошибка: нет данных о координатах бизнесов", -1)
-        return
-    end
+    local minMoney = settings.MIN_MONEY_TO_RENDER
+    local maxDist = settings.dist_render
 
-    -- Инициализация игнор?таблицы, если её нет
-    if not settings.ignoreBizIds then
-        settings.ignoreBizIds = {}
-    end
-
-    local renderedCount = 0
-    local skippedCount = 0
-
-    for i, coordbiz in pairs(CoordBizness.coordbiz) do
-        local coordx, coordy, coordz, idbiz = table.unpack(coordbiz)
-
-        -- Приведение типов и проверка валидности
-        coordx = tonumber(coordx)
-        coordy = tonumber(coordy)
-        coordz = tonumber(coordz)
-        idbiz = tonumber(idbiz)
-
-        if not coordx or not coordy or not coordz or not idbiz then
-            sampAddChatMessage("Пропуск: некорректные координаты или ID для бизнеса №" .. tostring(i), -1)
-            skippedCount = skippedCount + 1
+    for id, coord in pairs(coordById) do
+        local biz = bizById[id]
+        if not biz or ignoreBiz[id] then
             goto continue
         end
 
-        -- ПРОВЕРКА: находится ли бизнес в игнор-таблице (массив ID)
-        local isIgnored = false
-        for _, ignoredId in ipairs(settings.ignoreBizIds) do
-            if tonumber(ignoredId) == idbiz then
-                isIgnored = true
-                break
+        -- Получаем деньги бизнеса
+        local money = biz.moneyValue
+        if not money then
+            local rawMoney = biz.moneyMafia or biz.money or 0
+            rawMoney = tostring(rawMoney):gsub("[^%d]", "")
+            money = tonumber(rawMoney) or 0
+            biz.moneyValue = money
+        end
+
+        if money >= minMoney then
+            -- Вычисляем расстояние
+            local dx = coord.x - px
+            local dy = coord.y - py
+            local dz = coord.z - pz
+            local dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+
+            if dist <= maxDist then
+                -- Преобразуем 3D?координаты в экранные для центра круга
+                local okCenter, centerSx, centerSy = convert3DCoordsToScreenEx(coord.x, coord.y, coord.z, true, true)
+
+                if okCenter then
+                    -- Определяем цвет в зависимости от суммы денег
+                    local color = 0xFFFF0000
+                    if money > 200000 then color = 0xFFFFFF00 end
+            if money > 800000 then color = 0xFF00FF00 end
+
+            -- Рисуем 3D?круг только если центр бизнеса виден на экране
+            if RENDER_CIRCLES[0] and dist < 200 then
+                Draw3DCircle(coord.x, coord.y, coord.z - 2, 12, color, 2.5, 40)
             end
+
+            -- Форматируем сумму денег с точками как разделителями тысяч
+            local formattedMoney = formatMoneyWithDots(money)
+
+            -- Отображаем информацию о бизнесе
+            renderFontDrawTextAlign(
+                font,
+                ('[{ff0000}%d{ffffff}] %s'):format(id, biz.nameBiz),
+                centerSx, centerSy,
+                0xFFFFFFFF,
+                2
+            )
+            renderFontDrawTextAlign(
+                font,
+                string.format('%.0f | {20E10E}%s', dist, formattedMoney),
+                centerSx, centerSy + 20,
+                0xFFFFFFFF,
+                2
+            )
         end
-
-        if isIgnored then
-            skippedCount = skippedCount + 1
-            goto continue
-        end
-
-        -- Проверка: есть ли бизнес в settings.bizMafia
-        if settings.bizMafia then
-            for _, mafiaBizId in pairs(settings.bizMafia) do
-                local mafiaIdNum = tonumber(mafiaBizId)
-                if mafiaIdNum and mafiaIdNum == idbiz then
-                break
-            end
-        end
     end
+end
+::continue::
+end
+end
 
-    -- Поиск бизнеса в базе
-    local moneyValue = 0
-    local nameBiz = "Неизвестно"
-    local biz = bizById[idbiz] or bizById[tostring(idbiz)]
-
-    if not biz then
-        skippedCount = skippedCount + 1
-        goto continue
-    end
-
-    -- Безопасное извлечение суммы
-    local rawMoney = biz.moneyMafia or biz.money or biz.income or biz.cash
-    if rawMoney then
-        if type(rawMoney) == "string" then
-            rawMoney = string.gsub(rawMoney, "[^%d%.%-]", "")
-        end
-        moneyValue = tonumber(rawMoney) or 0
-    else
-        moneyValue = 0
-    end
-    nameBiz = tostring(biz.nameBiz or biz.name or "Без названия")
-
-    -- ПРОВЕРКА: минимальная сумма для рендера
-    local MIN_MONEY_TO_RENDER = tonumber(settings.MIN_MONEY_TO_RENDER)
-    if moneyValue < MIN_MONEY_TO_RENDER then
-        skippedCount = skippedCount + 1
-        goto continue
-    end
-
-    -- Расчёт расстояния
-    local playerToTextDist = getDistanceBetweenCoords3D(
-        playerX, playerY, playerZ,
-        coordx, coordy, coordz
-    )
-
-    if type(playerToTextDist) ~= "number" then
-        skippedCount = skippedCount + 1
-        goto continue
-    end
-
-    if playerToTextDist > settings.dist_render then
-        skippedCount = skippedCount + 1
-        goto continue
-    end
-
-    -- Конвертация координат
-    local result, screenX, screenY, _, _, _ =
-        convert3DCoordsToScreenEx(coordx, coordy, coordz, true, true)
-
-    if not result or not screenX or not screenY then
-        skippedCount = skippedCount + 1
-        goto continue
-    end
-
-    -- ОТРИСОВКА КРУГА (если включено)
-    if settings.render_circle then
-        -- Отрисовка 3D?круга вокруг бизнеса
-        local circleRadius = 15.0
-        if playerToTextDist < 35.0 then
-            circleRadius = 20.0
-        elseif playerToTextDist < 75.0 then
-            circleRadius = 15
-        elseif playerToTextDist < 100.0 then
-            circleRadius = 10
-        elseif playerToTextDist < 200.0 then
-            circleRadius = 5
-        elseif playerToTextDist > 200.0 then
-            circleRadius = 0
-        end
-
-        -- Цвет круга в зависимости от дохода бизнеса
-        local circleColor = 0xFFFF0000  -- красный: низкий доход
-        if moneyValue > 200000 then
-            circleColor = 0xFFFFFF00  -- жёлтый: средний доход
-        end
-        if moneyValue > 800000 then
-            circleColor = 0xFF00FF00  -- зелёный: высокий доход
-        end
-
-        local circleSize = 2.5
-
-        Draw3DCircle(coordx, coordy, coordz - 2, circleRadius, circleColor, circleSize, 50)
-    end
-
-    -- Определение смещения для текста
-    local verticalOffset = 0
-    if playerToTextDist < 10.0 then verticalOffset = 120
-    elseif playerToTextDist < 20.0 then verticalOffset = 100
-    elseif playerToTextDist < 35.0 then verticalOffset = 80
-    elseif playerToTextDist < 55.0 then verticalOffset = 50
-    elseif playerToTextDist < 75.0 then verticalOffset = 30
-    elseif playerToTextDist < 100.0 then verticalOffset = 20
-    elseif playerToTextDist < 150.0 then verticalOffset = 0
-    else verticalOffset = -100 end
-
-    -- Отрисовка текста (с проверкой шрифта)
-    if font then
-        renderFontDrawTextAlign(
-            font,
-            '[{ff0000}'..tostring(idbiz)..'{ffffff}] | '..nameBiz,
-            screenX,
-            screenY + verticalOffset,
-            0xFFFFFFFF, 2
-        )
-        renderFontDrawTextAlign(
-            font,
-            string.format('%.2f', playerToTextDist)..' | {20E10E}'..tostring(moneyValue),
-            screenX,
-            screenY + verticalOffset + 25,
-            0xFFFFFFFF, 2
-        )
-    else
-        sampAddChatMessage("Ошибка: шрифт не инициализирован (font == nil)", -1)
-        return
-    end
-
-    renderedCount = renderedCount + 1
-    ::continue::
-    end
+-- Безопасный парсер денег
+function parseMoney(value)
+    if not value then return 0 end
+    local clean = tostring(value):gsub("[^%d]", "")
+    if clean == "" then return 0 end
+    return tonumber(clean) or 0
 end
 
 function getDistanceBetweenCoords3D(x1, y1, z1, x2, y2, z2) -- Вычелсение координат в пространстве
@@ -1379,7 +1619,49 @@ function getDistanceBetweenCoords3D(x1, y1, z1, x2, y2, z2) -- Вычелсение коорди
     return math.sqrt(dx*dx + dy*dy + dz*dz)
 end
 
+-- Функция проверки, входит ли ник в особый список
+local function isSpecialNick(nickname)
+    if not nickname then return false end
+    for _, specialNick in pairs(allNick.uniqueNick or {}) do
+        if toFullLower(specialNick) == toFullLower(nickname) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Функция проверки, входит ли ник в список друзей
+local function isFriend(nickname)
+    if not nickname then return false end
+    for _, friendNick in pairs(allNick.friendNick or {}) do
+        if toFullLower(friendNick) == toFullLower(nickname) then
+            return true
+        end
+    end
+    return false
+end
+
+function parseChatMessage(text) -- Универсальный парсер чатов
+
+    local patterns = {
+        { '%[F%] .+ (.+_.+)%[%d+%]: (.+)', 'fb' },
+        { '%[F%] .+ (.+_.+)%[%d+%]: %(%( (.+) %)%)', 'fb' },
+        { '{.-}%[Семья%] .+ (.+_.+)%[%d+%]:{.-} (.+)', 'fam' },
+        { '%[Альянс%] .+ (.+_.+)%[%d+%]: (.+)', 'al' }
+    }
+
+    for _,p in ipairs(patterns) do
+        local nick,msg = text:match(p[1])
+        if nick then
+            return nick,msg,p[2]
+        end
+    end
+
+    return nil
+end
+
 function ev.onServerMessage(color, text)
+
     local _, id = sampGetPlayerIdByCharHandle(PLAYER_PED)
     local nameplayer = sampGetPlayerNickname(id)
 
@@ -1420,6 +1702,18 @@ function ev.onServerMessage(color, text)
         end
     end
 
+    if sellrank then
+        if text:match('%[Ошибка%] {ffffff}Игрок не может купить ранг, так как него отсутствует мед.карта или просрочена!') then
+            sellrank = false
+            lua_thread.create(function ()
+                sampSendChat('Слушай, а как давно у тебя медкарта? Ты обновлял её?')
+                wait(1500)
+                sampSendChat('/b Тебе нужно обновить медкарту - [Ошибка] Игрок не может купить ранг, так как него отсутствует мед.карта или просрочена!')
+            end)
+            return
+        end
+    end
+
     do -- фаст выдача ранга при инвайте
         local invitename = string.match(text, 'Приветствуем нового члена нашей организации (.+_.+), которого пригласил: '..nameplayer..'%[%d+].')
         if invitename and fastinvite then
@@ -1427,9 +1721,6 @@ function ev.onServerMessage(color, text)
             sampSendChat('/giverank '..invitename..' '..rankinvite)
         end
     end
-
---[Информация] {ffffff}Собеседник взял трубку
---[Информация] {FFFFFF}Звонок окончен! Время разговора {73B461}30 секунд.
 
 end
 
@@ -1470,27 +1761,23 @@ function ev.onShowDialog(id, style, title, b1, b2, text)
                         local idbizStr = tostring(idbiz)
 
                         -- Ищем существующий бизнес по ID
-                        local existingBizIndex = nil
-                        for i, biz in ipairs(settings.bizMafia) do
-                            if biz.idBiz == idbizStr then
-                                existingBizIndex = i
-                                break
-                            end
-                        end
+                        local existingBiz = bizById[tonumber(idbiz)]
 
-                        if existingBizIndex then
-                            -- Обновляем только moneyMafia у существующего бизнеса, сохраняя формат с $ и запятыми
-                            settings.bizMafia[existingBizIndex].moneyMafia = moneyBiz
+                        if existingBiz then
+                            existingBiz.moneyMafia = moneyBiz
+
+                            local clean = tostring(moneyBiz):gsub("[^%d]","")
+                            existingBiz.moneyValue = tonumber(clean) or 0
                         else
-                            -- Добавляем новый бизнес, если его ещё нет
-                            table.insert(settings.bizMafia, {
-                            idBiz = idbizStr,
-                            nameBiz = namebiz,
-                            ownerBiz = OwnerBiz,
-                            moneyMafia = moneyBiz,  -- сохраняем как есть, с $ и запятыми
-                            finkaBiz = finka       -- сохраняем как есть, с $ и запятыми
-                                })
+                            table.insert(settings.bizMafia,{
+                                idBiz = idbizStr,
+                                nameBiz = namebiz,
+                                ownerBiz = OwnerBiz,
+                                moneyMafia = moneyBiz,
+                                finkaBiz = finka
+                            })
                         end
+                        rebuildIndexes()
                     end
                 end
 
@@ -1535,7 +1822,7 @@ function ev.onShowDialog(id, style, title, b1, b2, text)
                     mbiz = false
                     lastFinkaUpdate = os.time() * 1000
 
-                    sampAddChatMessage("Обновление бизнесов завершено!", -1)
+                    --sampAddChatMessage(tag..' Обновление бизнесов {61e846}завершено!', -1)
                     --sampAddChatMessage('Обработка всех страниц завершена! Всего бизнесов: ' .. #settings.bizMafia, -1)
                     end)
             end
@@ -1559,7 +1846,7 @@ function ev.onShowDialog(id, style, title, b1, b2, text)
         end
 
         if text:find('в общак вашей орг') then
-            if settings.autoTimeAndScreen then
+            if autoTimeAndScreen[0] then
                 lua_thread.create(function()
                     sampSendChat("/time")
                     wait(200)
@@ -1639,92 +1926,81 @@ function ev.onShowDialog(id, style, title, b1, b2, text)
         end
     end
 
-    if id == 25526 and title:match('{BFBBBA}Выбор места спавна') then -- Выбор спавна если есть ADD VIP
-        if AutoSpawnFraction then
-            if text:match('{ae433d}%[%d+%] {ffffff}Организация Tierra Robada Bikers')then
-                lua_thread.create(function()
-                    wait(0)
-                    listbox = sampGetListboxItemByText('Организация Tierra Robada Bikers') -- тут НЕ ЭКРАНИРУЕМ
-                    sampSendDialogResponse(id, 1, listbox, nil)
+    if id == 25526 and title:find('Выбор места спавна') then
+        if selectSpawnEnabled then
+            lua_thread.create(function()
+                wait(0)
+                local index = sampGetListboxItemByText('Организация Tierra Robada Bikers')
+                if index then
+                    sampSendDialogResponse(id,1,index,nil)
                     sampCloseCurrentDialogWithButton(0)
-                    sampAddChatMessage('выбрал '..listbox, -1)
+                end
+                selectSpawnEnabled = false
+            end)
+        end
+    end
+
+    do -- Продажа ранга
+        if id == 27273 and title:match('{%BFBBBA%}Выбор игрока') then
+            if sellRankData and sellRankData.sellrank then
+                local nameplayer = sampGetPlayerNickname(sellRankData.iFraction)
+
+                if text:match('%{C0C0C0%}%[%d+%] %{FFFFFF%}.-%(%d+%)%s*%d*%.?%d* м%.') then
+                    lua_thread.create(function()
+                        wait(0)
+                        listbox = sampGetListboxItemByText(''..nameplayer..'('..sellRankData.iFraction..')')
+                        if listbox ~= nil then
+                            sampSendDialogResponse(id, 1, listbox, nil)
+                            sampCloseCurrentDialogWithButton(0)
+                        else
+                            sampAddChatMessage(tag..' Не нашёл игрока в списке!', base_color)
+                        end
                     end)
-            end
-            AutoSpawnFraction = false
-        end
-
-    end
-
-    if id == 27273 and title:match('{%BFBBBA%}Выбор игрока') then
-        if sellRankData and sellRankData.sellrank then
-            local nameplayer = sampGetPlayerNickname(sellRankData.iFraction)
-            --sampAddChatMessage(nameplayer .. ' ' .. sellRankData.iFraction, -1)
-
-            if text:match('%{C0C0C0%}%[%d+%] %{FFFFFF%}.-%(%d+%)%s*%d*%.?%d* м%.') then
-                lua_thread.create(function()
-                    wait(0)
-                    listbox = sampGetListboxItemByText(''..nameplayer..'('..sellRankData.iFraction..')')
-                    if listbox ~= nil then
-                        sampSendDialogResponse(id, 1, listbox, nil)
-                        sampCloseCurrentDialogWithButton(0)
-                        --sampAddChatMessage('выбрал ' .. tostring(listbox), -1)
-                    else
-                        sampAddChatMessage(tag..' Не нашёл игрока в списке!', base_color)
-                    end
-                end)
+                end
             end
         end
-    end
 
-    if id == 27274 and title:match('{%BFBBBA%}Список свободных вакансий %[всего: %d+ игроков%]') then
-        if sellRankData and sellRankData.sellrank then
-            --sampAddChatMessage('DEBUG: Условие выполнено! Заходим в блок.', -1)
+        if id == 27274 and title:match('{%BFBBBA%}Список свободных вакансий %[всего: %d+ игроков%]') then
+            if sellRankData and sellRankData.sellrank then
 
-            local sellrank = {
-                [6] = '{%C0C0C0%}%[6%] {%FFFFFF%}.+ {%10F441%}%d+ / .+',
-                [7] = '{%C0C0C0%}%[7%] {%FFFFFF%}.+ {%10F441%}%d+ / .+'
-            }
+                local sellrank = {
+                    [6] = '{%C0C0C0%}%[6%] {%FFFFFF%}.+ {%10F441%}%d+ / .+',
+                    [7] = '{%C0C0C0%}%[7%] {%FFFFFF%}.+ {%10F441%}%d+ / .+'
+                }
 
-            -- Выводим отладочную информацию
-            --for i, rank in ipairs(sellrank) do
-            --    sampAddChatMessage('DEBUG: i=' .. i .. ', шаблон=' .. rank, -1)
-            --end
+                -- Проверяем, существует ли rFraction в sellrank
+                if not sellRankData.rFraction then
+                    sampAddChatMessage(tag .. ' Ошибка: rFraction не задан!', base_color)
+                    return
+                end
 
-            -- Проверяем, существует ли rFraction в sellrank
-            if not sellRankData.rFraction then
-                sampAddChatMessage(tag .. ' Ошибка: rFraction не задан!', base_color)
-                return
+                if not sellrank[sellRankData.rFraction] then
+                    sampAddChatMessage(tag .. ' Введите корректный номер продаваемого ранга (6 или 7)!', base_color)
+                    return
+                end
+
+                -- Отправляем ответ только для нужного ранга
+                sampSendDialogResponse(id, 1, sellRankData.rFraction - 1, nil)
+                return false
             end
+        end
 
-            if not sellrank[sellRankData.rFraction] then
-                sampAddChatMessage(tag .. ' Введите корректный номер продаваемого ранга (6 или 7)!', base_color)
-                return
-            end
-
-            --local list = sellRankData.rFraction - 1
-
-            -- Отправляем ответ только для нужного ранга
-            sampSendDialogResponse(id, 1, sellRankData.rFraction - 1, nil)
-            --sampAddChatMessage('Выбран ранг №' .. list, -1)
+        if id == 27275 and title:match('{BFBBBA}Количество дней') then
+            sampSendDialogResponse(id, 1, nil, sellRankData.dFraction)
             return false
         end
-    end
 
-    if id == 27275 and title:match('{BFBBBA}Количество дней') then
-        sampSendDialogResponse(id, 1, nil, sellRankData.dFraction)
-        return false
-    end
+        if id == 27276 and title:match('{BFBBBA}Стоимость за день') then
+            local money = math.ceil( sellRankData.pFraction / sellRankData.dFraction )
+            sampSendDialogResponse(id, 1, '', money)
+            return false
+        end
 
-    if id == 27276 and title:match('{BFBBBA}Стоимость за день') then
-        local money = math.ceil( sellRankData.pFraction / sellRankData.dFraction )
-        sampSendDialogResponse(id, 1, '', money)
-        return false
-    end
-
-    if id == 27277 and title:match('{BFBBBA}Подтверждение указанных данных') then
-        sampSendDialogResponse(id, 1, nil, '')
-        sellRankData = nil
-        return false
+        if id == 27277 and title:match('{BFBBBA}Подтверждение указанных данных') then
+            sampSendDialogResponse(id, 1, nil, '')
+            sellRankData = nil
+            return false
+        end
     end
 
     if fastinvite then-- Диалог инвайта
@@ -1741,14 +2017,38 @@ function ev.onShowDialog(id, style, title, b1, b2, text)
         return false
     end
 
---Его id: 1214 Его стиль: 2 Его наименование: {BFBBBA}{FFFFFF}Банк: {E1E948}$583792808
---Его id: 27273 Его стиль: 5 Его наименование: {BFBBBA}Выбор игрока
---{FFFFFF}Ник {F0E68C}Дистанция {C0C0C0}[1] {FFFFFF}Kleo_Wepor(170) 7.0 м. {C0C0C0}[2] {FFFFFF}Logan_Angels(502) 1.2 м.
---Его id: 27274 Его стиль: 5 Его наименование: {BFBBBA}Список свободных вакансий [всего: 127 игроков]
---{FFFFFF}Ранг {FFFFFF}Вакансии {C0C0C0}[1] {FFFFFF}? {10F441}7 / ~ {C0C0C0}[2] {FFFFFF}? {10F441}0 / ~ {C0C0C0}[3] {FFFFFF}? {10F441}0 / ~ {C0C0C0}[4] {FFFFFF}? {10F441}0 / ~ {C0C0C0}[5] {FFFFFF}? {10F441}58 / ~ {C0C0C0}[6] {FFFFFF}? {10F441}11 / 210 {C0C0C0}[7] {FFFFFF}? {10F441}40 / 140 {C0C0C0}[8] {FFFFFF}? {10F441}3 / 4
---Его id: 27275 Его стиль: 1 Его наименование: {BFBBBA}Количество дней
---Его id: 27276 Его стиль: 1 Его наименование: {BFBBBA}Стоимость за день
---Его id: 27277 Его стиль: 0 Его наименование: {BFBBBA}Подтверждение указанных данных
+    if id == 1488 and title:match('{.-}{.-}.+%(В сети: %d+%) | {.-}Семья') then -- Автоподгруз ников из fmembers
+        if takeNickFamMembers then
+            local insertedCount = 0  -- счётчик добавленных элементов
+
+            for n in text:gmatch("[^\r\n]+") do
+
+                local name = n:match('%(%d+%)%s+(.+_.+)%(%d+%)%s+%[%d+%]%s+{.-}%(%d+/%d+%){.-}%s+%d+/%d+%s+%d+м.%s+%d+')
+                
+                -- Строгая проверка: имя не пустое и содержит хотя бы один непробельный символ
+                if name then
+                    -- Убираем пробелы в начале и конце
+                    name = name:match('^%s*(.-)%s*$')
+                    -- Проверяем, что после обрезки имя не стало пустым
+                    if name ~= '' and name:find('%S') then
+                        table.insert(allNick.friendNick, name)
+                        insertedCount = insertedCount + 1
+                    end
+                end
+
+            end
+
+            -- Сохраняем и выводим сообщение только один раз
+            takeNickFamMembers = false
+            local status, code = json('ListNick.json'):Save(allNick)
+            if insertedCount > 0 then
+                sampAddChatMessage(tag .. ' Список софамов сохранён из fmembers! (добавлено: ' .. insertedCount.. ')', base_color)
+            else
+                sampAddChatMessage(tag .. ' Софамы не найдены в текущем списке.', base_color)
+            end
+            return false
+        end
+    end
 
 end
 
@@ -1908,7 +2208,7 @@ end
 
 function formatMoneyWithSpaces(moneyStr) -- Функция разделения чисел
     -- Удаляем $ и запятые, если они есть
-    local cleanMoney = string.gsub(moneyStr, "[$,]", "")
+    local cleanMoney = string.gsub(moneyStr, "[$.]", "")
 
     -- Обрабатываем только цифры
     if not tonumber(cleanMoney) then
@@ -1927,6 +2227,30 @@ function formatMoneyWithSpaces(moneyStr) -- Функция разделения чисел
     end
 
     return "$" .. formatted
+end
+
+function formatMoneyWithDots(moneyNum)
+    -- Если на вход пришла строка — пытаемся преобразовать в число
+    if type(moneyNum) == "string" then
+        moneyNum = tonumber(moneyNum:gsub("[^%d]", "")) or 0
+    end
+
+    -- Гарантируем, что работаем с числом
+    moneyNum = math.floor(moneyNum or 0)
+
+    local numStr = tostring(moneyNum)
+    local result = ""
+    local digitCount = 0
+
+    for i = #numStr, 1, -1 do
+        result = numStr:sub(i, i) .. result
+        digitCount = digitCount + 1
+        if digitCount % 3 == 0 and i > 1 then
+            result = "." .. result
+        end
+    end
+
+    return result
 end
 
 function renderFontDrawTextAlign(font, text, x, y, color, align) -- Центрование 3D текст
@@ -2003,6 +2327,34 @@ function notif(type, title, text, time) -- Уведомление как на АРЗ
     raknetDeleteBitStream(bs)
 end
 
+function hisms() -- Уведомление как на АРЗ
+--window.executeEvent('cef.modals.closeModal', `["dialogTip"]`);
+    local json = '["dialogTip",{"position":"rightBottom","backgroundImage":"quest_basic_background_13.webp","icon":"icon-info","iconColor":"#e88146","highlightColor":"#5FC6FF","text":"HelperMafia успешно загружен!\nПриятного пользования!"}]'
+    local code = "window.executeEvent('cef.modals.showModal', `" .. json .. "`);"
+    local bs = raknetNewBitStream()
+    raknetBitStreamWriteInt8(bs, 17)
+    raknetBitStreamWriteInt32(bs, 0)
+    raknetBitStreamWriteInt16(bs, #code)
+    raknetBitStreamWriteInt8(bs, 0)
+    raknetBitStreamWriteString(bs, code)
+    raknetEmulPacketReceiveBitStream(220, bs)
+    raknetDeleteBitStream(bs)
+    lua_thread.create(function ()
+        wait(4500)
+        local json = '["dialogTip"]'
+        local code = "window.executeEvent('cef.modals.closeModal', `" .. json .. "`);"
+        local bs = raknetNewBitStream()
+        raknetBitStreamWriteInt8(bs, 17)
+        raknetBitStreamWriteInt32(bs, 0)
+        raknetBitStreamWriteInt16(bs, #code)
+        raknetBitStreamWriteInt8(bs, 0)
+        raknetBitStreamWriteString(bs, code)
+        raknetEmulPacketReceiveBitStream(220, bs)
+        raknetDeleteBitStream(bs)
+    end)
+end
+--window.executeEvent('cef.modals.showModal', `["dialogTip",{"position":"rightBottom","backgroundImage":"quest_basic_background_13.webp","icon":"icon-info","iconColor":"#5FC6FF","highlightColor":"#5FC6FF","text":"Битва за контроль грузового корабля начнется через 5 минут!"}]`);
+
 function theme() -- Стиль mimgui
     imgui.SwitchContext()
     local style = imgui.GetStyle()
@@ -2069,6 +2421,236 @@ function theme() -- Стиль mimgui
     colors[clr.TextSelectedBg]         = ImVec4(1.00, 0.32, 0.32, 1.00);
     colors[clr.ModalWindowDimBg]   = ImVec4(0.26, 0.26, 0.26, 0.60);
 end
+
+--[[
+function drawBusinessInfoOnScreenVer2() -- Новая версия (Данные о бизнесе + рисование кругов)
+    -- Проверка флага отображения
+    if not RENDER_FINKA2[0] then
+        sampAddChatMessage("Рендер отключён (RENDER_FINKA2 = false)", -1)
+        return
+    end
+
+    -- Получаем координаты игрока
+    local playerX, playerY, playerZ = getCharCoordinates(PLAYER_PED)
+    if not playerX or not playerY or not playerZ then
+        sampAddChatMessage("Ошибка: не удалось получить координаты игрока", -1)
+        return
+    end
+
+    -- Проверка данных о координатах бизнесов
+    if not CoordBizness.coordbiz or next(CoordBizness.coordbiz) == nil then
+        sampAddChatMessage("Ошибка: нет данных о координатах бизнесов", -1)
+        return
+    end
+
+    -- Инициализация игнор?таблицы, если её нет
+    if not settings.ignoreBizIds then
+        settings.ignoreBizIds = {}
+    end
+
+    local renderedCount = 0
+    local skippedCount = 0
+
+    for i, coordbiz in pairs(CoordBizness.coordbiz) do
+        local coordx, coordy, coordz, idbiz = table.unpack(coordbiz)
+
+        -- Приведение типов и проверка валидности
+        coordx = tonumber(coordx)
+        coordy = tonumber(coordy)
+        coordz = tonumber(coordz)
+        idbiz = tonumber(idbiz)
+
+        if not coordx or not coordy or not coordz or not idbiz then
+            sampAddChatMessage("Пропуск: некорректные координаты или ID для бизнеса №" .. tostring(i), -1)
+            skippedCount = skippedCount + 1
+            goto continue
+        end
+
+        -- ПРОВЕРКА: находится ли бизнес в игнор-таблице (массив ID)
+        local isIgnored = false
+        for _, ignoredId in ipairs(settings.ignoreBizIds) do
+            if tonumber(ignoredId) == idbiz then
+                isIgnored = true
+                break
+            end
+        end
+
+        if isIgnored then
+            skippedCount = skippedCount + 1
+            goto continue
+        end
+
+        -- Проверка: есть ли бизнес в settings.bizMafia
+        if settings.bizMafia then
+            for _, mafiaBizId in pairs(settings.bizMafia) do
+                local mafiaIdNum = tonumber(mafiaBizId)
+                if mafiaIdNum and mafiaIdNum == idbiz then
+                break
+            end
+        end
+    end
+
+    -- Поиск бизнеса в базе
+    local moneyValue = 0
+    local nameBiz = "Неизвестно"
+    local biz = bizById[idbiz] or bizById[tostring(idbiz)]
+
+    if not biz then
+        skippedCount = skippedCount + 1
+        goto continue
+    end
+
+    -- Безопасное извлечение суммы
+    local rawMoney = biz.moneyMafia or biz.money or biz.income or biz.cash
+    if rawMoney then
+        if type(rawMoney) == "string" then
+            rawMoney = string.gsub(rawMoney, "[^%d%.%-]", "")
+        end
+        moneyValue = tonumber(rawMoney) or 0
+    else
+        moneyValue = 0
+    end
+    nameBiz = tostring(biz.nameBiz or biz.name or "Без названия")
+
+    -- ПРОВЕРКА: минимальная сумма для рендера
+    local MIN_MONEY_TO_RENDER = tonumber(settings.MIN_MONEY_TO_RENDER)
+    if moneyValue < MIN_MONEY_TO_RENDER then
+        skippedCount = skippedCount + 1
+        goto continue
+    end
+
+    -- Расчёт расстояния
+    local playerToTextDist = getDistanceBetweenCoords3D(
+        playerX, playerY, playerZ,
+        coordx, coordy, coordz
+    )
+
+    if type(playerToTextDist) ~= "number" then
+        skippedCount = skippedCount + 1
+        goto continue
+    end
+
+    if playerToTextDist > settings.dist_render then
+        skippedCount = skippedCount + 1
+        goto continue
+    end
+
+    -- Конвертация координат
+    local result, screenX, screenY, _, _, _ =
+        convert3DCoordsToScreenEx(coordx, coordy, coordz, true, true)
+
+    if not result or not screenX or not screenY then
+        skippedCount = skippedCount + 1
+        goto continue
+    end
+
+    -- ОТРИСОВКА КРУГА (если включено)
+    if RENDER_CIRCLES[0] then
+        -- Отрисовка 3D?круга вокруг бизнеса
+        local circleRadius = 15.0
+        if playerToTextDist < 35.0 then
+            circleRadius = 20.0
+        elseif playerToTextDist < 75.0 then
+            circleRadius = 15
+        elseif playerToTextDist < 100.0 then
+            circleRadius = 10
+        elseif playerToTextDist < 200.0 then
+            circleRadius = 5
+        elseif playerToTextDist > 200.0 then
+            circleRadius = 0
+        end
+
+        -- Цвет круга в зависимости от дохода бизнеса
+        local circleColor = 0xFFFF0000  -- красный: низкий доход
+        if moneyValue > 200000 then
+            circleColor = 0xFFFFFF00  -- жёлтый: средний доход
+        end
+        if moneyValue > 800000 then
+            circleColor = 0xFF00FF00  -- зелёный: высокий доход
+        end
+
+        local circleSize = 2.5
+
+        Draw3DCircle(coordx, coordy, coordz - 2, circleRadius, circleColor, circleSize, 50)
+    end
+
+    -- Определение смещения для текста
+    local verticalOffset = 0
+    if playerToTextDist < 10.0 then verticalOffset = 120
+    elseif playerToTextDist < 20.0 then verticalOffset = 100
+    elseif playerToTextDist < 35.0 then verticalOffset = 80
+    elseif playerToTextDist < 55.0 then verticalOffset = 50
+    elseif playerToTextDist < 75.0 then verticalOffset = 30
+    elseif playerToTextDist < 100.0 then verticalOffset = 20
+    elseif playerToTextDist < 150.0 then verticalOffset = 0
+    else verticalOffset = -100 end
+
+    -- Отрисовка текста (с проверкой шрифта)
+    if font then
+        renderFontDrawTextAlign(
+            font,
+            '[{ff0000}'..tostring(idbiz)..'{ffffff}] | '..nameBiz,
+            screenX,
+            screenY + verticalOffset,
+            0xFFFFFFFF, 2
+        )
+        renderFontDrawTextAlign(
+            font,
+            string.format('%.2f', playerToTextDist)..' | {20E10E}'..tostring(moneyValue),
+            screenX,
+            screenY + verticalOffset + 25,
+            0xFFFFFFFF, 2
+        )
+    else
+        sampAddChatMessage("Ошибка: шрифт не инициализирован (font == nil)", -1)
+        return
+    end
+
+    renderedCount = renderedCount + 1
+    ::continue::
+    end
+end
+]]
+--[[
+function Draw3DCircle(x, y, z, radius, color, width, segments) -- Рисование круга
+    -- Параметры по умолчанию
+    color = color or 0xFFD00000  -- красный (ARGB)
+    width = width or 3.0          -- ширина линии
+    segments = segments or 12      -- количество сегментов
+
+    -- Проверка видимости центра круга
+    local centerResult, centerScreenX, centerScreenY = convert3DCoordsToScreenEx(x, y, z + 0.5, true, true)
+    if not centerResult then
+        return  -- не рисуем, если центр не виден
+    end
+
+    local prevScreenX, prevScreenY = nil, nil
+
+    for i = 0, segments do
+        local angle = (i / segments) * 2 * math.pi
+        local px = x + radius * math.cos(angle)
+        local py = y + radius * math.sin(angle)
+        local pz = z + 0.5  -- слегка выше земли для лучшей видимости
+
+        -- Конвертируем в экранные координаты
+        local result, screenX, screenY = convert3DCoordsToScreenEx(px, py, pz, true, true)
+
+        if result and screenX and screenY then
+            -- Рисуем линию, если есть предыдущая точка
+            if prevScreenX and prevScreenY then
+                renderDrawLine(prevScreenX, prevScreenY, screenX, screenY, width, color)
+            end
+            -- Обновляем предыдущую точку
+            prevScreenX, prevScreenY = screenX, screenY
+        end
+    end
+
+    -- Замыкаем круг: соединяем последнюю видимую точку с первой
+    if prevScreenX and prevScreenY and centerScreenX and centerScreenY then
+        renderDrawLine(prevScreenX, prevScreenY, centerScreenX, centerScreenY, width, color)
+    end
+end
+]]
 
 --[[
 function drawBusinessInfoOnScreenVer2() -- Новая версия (Данные о бизнесе + рисование кругов)
